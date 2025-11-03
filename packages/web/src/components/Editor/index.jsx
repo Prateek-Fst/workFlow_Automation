@@ -31,6 +31,9 @@ import { EDGE_TYPES, INVISIBLE_NODE_ID, NODE_TYPES } from './constants';
 import { EditorWrapper } from './style';
 import { EdgesContext, NodesContext } from './contexts';
 import StepDetailsSidebar from 'components/StepDetailsSidebar';
+import WorkflowImporter from './WorkflowImporter';
+import { DirectedGraph } from './DirectedGraph';
+import { WorkflowExecute } from './WorkflowExecute';
 
 const ENABLE_AUTO_SELECT = false;
 
@@ -116,100 +119,56 @@ const Editor = ({ flow }) => {
 
   const onStepAdd = useCallback(
     async (previousStepId) => {
-      console.log('🚀 === ON STEP ADD START ===');
-      console.log('🔍 Previous step ID:', previousStepId);
-      console.log('🔍 Current nodes count:', nodes.length);
-      console.log('🔍 All current nodes:', nodes.map(n => ({ id: n.id, position: n.position, type: n.type })));
-      
       const { data: createdStep } = await createStep({ previousStepId });
-      console.log('✅ Created step from backend:', createdStep);
-      console.log('🆔 New step ID:', createdStep.id);
-
+      
       const previousNode = nodes.find(n => n.id === previousStepId);
-      console.log('🔍 Found previous node:', previousNode);
+      if (!previousNode) return;
       
-      if (!previousNode) {
-        console.error('❌ Previous node not found! This is the problem!');
-        console.log('🔍 Available node IDs:', nodes.map(n => n.id));
-        console.log('🔍 Looking for ID:', previousStepId);
-      }
-      
-      // Calculate position for new node (below previous node)
-      const newPosition = previousNode ? {
+      const newPosition = {
         x: previousNode.position.x,
         y: previousNode.position.y + 150,
-      } : { 
-        x: 300, // Default fallback position
-        y: 150 
       };
-      
-      console.log('📍 Calculated new position:', newPosition);
-      console.log('📍 Previous node position was:', previousNode?.position);
       
       const newNode = {
         id: createdStep.id,
         type: NODE_TYPES.FLOW_STEP,
         position: newPosition,
-        data: {
-          laidOut: true, // Mark as laid out immediately
-        },
+        data: { laidOut: true },
       };
-      
-      console.log('🆕 New node object:', newNode);
 
-      // CRITICAL: Save the visual position to backend immediately
-      console.log('💾 Saving visual position to backend:', newPosition);
-      try {
-        const updateResult = await updateStep({
-          id: createdStep.id,
-          visualPosition: newPosition,
-        });
-        console.log('✅ Backend update result:', updateResult);
-      } catch (error) {
-        console.error('❌ Backend update failed:', error);
-      }
+      await updateStep({
+        id: createdStep.id,
+        visualPosition: newPosition,
+      });
 
       const updatedNodes = nodes.flatMap((node) => {
         if (node.id === previousStepId) {
-          console.log('🔄 Inserting new node after:', node.id);
           return [node, newNode];
         }
-        // Update invisible node position to be below the new last node
         if (node.id === INVISIBLE_NODE_ID) {
-          const newInvisiblePosition = {
-            x: newPosition.x,
-            y: newPosition.y + 150,
-          };
-          console.log('👻 Updating invisible node position to:', newInvisiblePosition);
           return {
             ...node,
-            position: newInvisiblePosition
+            position: {
+              x: newPosition.x,
+              y: newPosition.y + 150,
+            }
           };
         }
         return node;
       });
-      
-      console.log('🔄 Updated nodes array:', updatedNodes.map(n => ({ id: n.id, position: n.position, type: n.type })));
 
       const updatedEdges = edges
         .map((edge) => {
           if (edge.source === previousStepId) {
             const previousTarget = edge.target;
-            console.log('🔗 Updating edge from', previousStepId, 'to split between', createdStep.id, 'and', previousTarget);
             return [
-              { 
-                ...edge, 
-                target: createdStep.id,
-                data: { ...edge.data, laidOut: true }
-              },
+              { ...edge, target: createdStep.id },
               {
                 id: uuidv4(),
                 source: createdStep.id,
                 target: previousTarget,
                 type: EDGE_TYPES.ADD_NODE_EDGE,
-                data: {
-                  laidOut: true, // Mark as laid out
-                },
+                data: { laidOut: true },
               },
             ];
           }
@@ -217,25 +176,118 @@ const Editor = ({ flow }) => {
         })
         .flat();
 
-      // Ensure all nodes maintain their laidOut status
-      const finalNodes = updatedNodes.map(node => ({
-        ...node,
-        data: {
-          ...node.data,
-          laidOut: true,
-        }
-      }));
-      
-      console.log('🏁 Final nodes being set:', finalNodes.map(n => ({ id: n.id, position: n.position, type: n.type })));
-      console.log('🏁 Final edges being set:', updatedEdges.length, 'edges');
-      
-      setNodes(finalNodes);
+      setNodes(updatedNodes);
       setEdges(updatedEdges);
-      
-      console.log('🚀 === ON STEP ADD END ===');
     },
     [createStep, nodes, edges, setNodes, setEdges, updateStep],
   );
+
+  const handleWorkflowImport = useCallback((workflow) => {
+    console.log('🔄 Importing Automatisch workflow:', workflow);
+    
+    // Create DirectedGraph instance
+    const graph = new DirectedGraph();
+    
+    // Add steps to graph
+    workflow.steps.forEach(step => {
+      graph.addNode(step.id, {
+        id: step.id,
+        name: step.name,
+        type: step.type,
+        structuralType: step.structuralType,
+        parentStepId: step.parentStepId,
+        branchConditions: step.branchConditions
+      });
+    });
+    
+    // Convert steps to visual nodes
+    const importedNodes = workflow.steps.map((step) => ({
+      id: step.id,
+      type: NODE_TYPES.FLOW_STEP,
+      position: step.visualPosition || { x: 0, y: 0 },
+      data: { 
+        laidOut: true,
+        structuralType: step.structuralType,
+        parentStepId: step.parentStepId,
+        branchConditions: step.branchConditions
+      },
+    }));
+    
+    // Add invisible node
+    const lastNode = importedNodes[importedNodes.length - 1];
+    importedNodes.push({
+      id: INVISIBLE_NODE_ID,
+      type: NODE_TYPES.INVISIBLE,
+      position: {
+        x: lastNode?.position.x || 300,
+        y: (lastNode?.position.y || 550) + 150,
+      },
+      data: { laidOut: true },
+    });
+    
+    // Create edges from connections
+    const importedEdges = [];
+    
+    Object.entries(workflow.connections).forEach(([sourceStepId, targetStepIds]) => {
+      const sourceStep = workflow.steps.find(s => s.id === sourceStepId);
+      if (!sourceStep) return;
+      
+      targetStepIds.forEach((targetStepId, index) => {
+        const targetStep = workflow.steps.find(s => s.id === targetStepId);
+        if (targetStep) {
+          // Add to graph
+          graph.addConnection(sourceStepId, targetStepId, 0, 0);
+          
+          // Create visual edge
+          importedEdges.push({
+            id: uuidv4(),
+            source: sourceStepId,
+            target: targetStepId,
+            type: EDGE_TYPES.ADD_NODE_EDGE,
+            data: {
+              laidOut: true,
+              branchIndex: index,
+            },
+          });
+        }
+      });
+    });
+    
+    // Add edges to invisible node from leaf nodes
+    const connectedNodeIds = new Set(importedEdges.map(e => e.target));
+    const leafNodes = importedNodes.filter(node => 
+      node.type === NODE_TYPES.FLOW_STEP && !connectedNodeIds.has(node.id)
+    );
+    
+    leafNodes.forEach((leafNode) => {
+      importedEdges.push({
+        id: uuidv4(),
+        source: leafNode.id,
+        target: INVISIBLE_NODE_ID,
+        type: EDGE_TYPES.ADD_NODE_EDGE,
+        data: { laidOut: true },
+      });
+    });
+    
+    // Create workflow executor
+    const executor = new WorkflowExecute(graph);
+    
+    // Test execution
+    const startNodes = graph.findStartNodes();
+    if (startNodes.length > 0) {
+      console.log('🏁 Testing multi-branch execution...');
+      executor.executeWorkflow(startNodes[0]).then(result => {
+        console.log('✅ Multi-branch execution completed:', result);
+      });
+    }
+    
+    console.log('✅ Imported nodes:', importedNodes);
+    console.log('✅ Imported edges:', importedEdges);
+    console.log('🔗 Graph connections:', graph.connectionsBySourceNode);
+    
+    setNodes(importedNodes);
+    setEdges(importedEdges);
+  }, [setNodes, setEdges]);
 
   const onNodesChange = useCallback(
     (changes) => {
@@ -327,6 +379,7 @@ const Editor = ({ flow }) => {
         console.log(`Step ${step.id}:`, {
           hasVisualPosition: !!step.visualPosition,
           visualPosition: step.visualPosition,
+          structuralType: step.structuralType,
         });
         
         return {
@@ -338,7 +391,10 @@ const Editor = ({ flow }) => {
           },
           zIndex: index !== 0 ? 0 : 1,
           data: {
-            laidOut: !!step.visualPosition, // True if position exists
+            laidOut: !!step.visualPosition,
+            structuralType: step.structuralType,
+            parentStepId: step.parentStepId,
+            branchConditions: step.branchConditions,
           },
         };
       });
@@ -493,6 +549,7 @@ const Editor = ({ flow }) => {
       }}
     >
       <EditorWrapper ref={containerRef}>
+        <WorkflowImporter onImport={handleWorkflowImport} />
         <EdgesContext.Provider
           value={{
             flowActive: flow?.active,

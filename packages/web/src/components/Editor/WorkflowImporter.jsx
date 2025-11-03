@@ -1,0 +1,174 @@
+import { useState } from 'react';
+import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
+
+const WorkflowImporter = ({ onImport }) => {
+  const [open, setOpen] = useState(false);
+  const [jsonInput, setJsonInput] = useState('');
+
+  const handleImport = () => {
+    try {
+      const workflow = JSON.parse(jsonInput);
+      onImport(workflow);
+      setOpen(false);
+      setJsonInput('');
+    } catch (error) {
+      alert('Invalid JSON format');
+    }
+  };
+
+  const sampleWorkflow = {
+    "name": "Automatisch Multi-Branch Demo",
+    "steps": [
+      {
+        "id": "trigger-step-1",
+        "name": "Manual Trigger",
+        "type": "trigger",
+        "appKey": "webhook",
+        "key": "webhook",
+        "structuralType": "single",
+        "position": 1,
+        "visualPosition": { "x": 300, "y": 100 },
+        "parameters": {
+          "workSynchronously": false
+        },
+        "status": "completed"
+      },
+      {
+        "id": "branch-step-2", 
+        "name": "Branch Decision",
+        "type": "action",
+        "appKey": "filter",
+        "key": "filter",
+        "structuralType": "branch",
+        "position": 2,
+        "visualPosition": { "x": 300, "y": 250 },
+        "parameters": {
+          "conditions": [
+            {
+              "field": "data.type",
+              "operator": "equals",
+              "value": "urgent"
+            }
+          ]
+        },
+        "branchConditions": [
+          {
+            "condition": "data.type === 'urgent'",
+            "targetStepId": "urgent-branch-3"
+          },
+          {
+            "condition": "data.type === 'normal'", 
+            "targetStepId": "normal-branch-4"
+          },
+          {
+            "condition": "default",
+            "targetStepId": "default-branch-5"
+          }
+        ],
+        "status": "completed"
+      },
+      {
+        "id": "urgent-branch-3",
+        "name": "Urgent Processing",
+        "type": "action", 
+        "appKey": "formatter",
+        "key": "text",
+        "structuralType": "single",
+        "parentStepId": "branch-step-2",
+        "position": 3,
+        "visualPosition": { "x": 100, "y": 400 },
+        "parameters": {
+          "text": "🚨 URGENT: Processing high priority item"
+        },
+        "status": "completed"
+      },
+      {
+        "id": "normal-branch-4",
+        "name": "Normal Processing",
+        "type": "action",
+        "appKey": "formatter", 
+        "key": "text",
+        "structuralType": "single",
+        "parentStepId": "branch-step-2",
+        "position": 4,
+        "visualPosition": { "x": 300, "y": 400 },
+        "parameters": {
+          "text": "📋 Processing normal priority item"
+        },
+        "status": "completed"
+      },
+      {
+        "id": "default-branch-5",
+        "name": "Default Processing",
+        "type": "action",
+        "appKey": "formatter",
+        "key": "text", 
+        "structuralType": "single",
+        "parentStepId": "branch-step-2",
+        "position": 5,
+        "visualPosition": { "x": 500, "y": 400 },
+        "parameters": {
+          "text": "⚙️ Processing default item"
+        },
+        "status": "completed"
+      },
+      {
+        "id": "merge-step-6",
+        "name": "Merge Results",
+        "type": "action",
+        "appKey": "formatter",
+        "key": "text",
+        "structuralType": "paths",
+        "position": 6,
+        "visualPosition": { "x": 300, "y": 550 },
+        "parameters": {
+          "text": "✅ All branches completed - merging results"
+        },
+        "status": "completed"
+      }
+    ],
+    "connections": {
+      "trigger-step-1": ["branch-step-2"],
+      "branch-step-2": ["urgent-branch-3", "normal-branch-4", "default-branch-5"],
+      "urgent-branch-3": ["merge-step-6"],
+      "normal-branch-4": ["merge-step-6"], 
+      "default-branch-5": ["merge-step-6"]
+    }
+  };
+
+  return (
+    <>
+      <Button 
+        variant="outlined" 
+        onClick={() => {
+          setJsonInput(JSON.stringify(sampleWorkflow, null, 2));
+          setOpen(true);
+        }}
+        sx={{ mb: 2 }}
+      >
+        Import Multi-Branch Workflow
+      </Button>
+      
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Import Multi-Branch Workflow JSON</DialogTitle>
+        <DialogContent>
+          <TextField
+            multiline
+            rows={20}
+            fullWidth
+            value={jsonInput}
+            onChange={(e) => setJsonInput(e.target.value)}
+            placeholder="Paste your Automatisch workflow JSON here..."
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={handleImport} variant="contained">Import</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default WorkflowImporter;
