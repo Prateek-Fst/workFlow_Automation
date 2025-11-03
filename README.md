@@ -1,61 +1,121 @@
-# Automatisch - Open Source Zapier Alternative
+# Automatisch - Open Source Zapier Alternative with Multi-Branch Support
 
-![Automatisch - Screenshot](https://user-images.githubusercontent.com/2501931/191562539-e42f6c34-03c7-4dc4-bcf9-7f9473a9c64f.png)
+🧐 Automatisch is a business automation tool that lets you connect different services like Twitter, Slack, and more to automate your business processes with advanced multi-branch workflow support.
 
-🧐 Automatisch is a business automation tool that lets you connect different services like Twitter, Slack, and more to automate your business processes.
+## Features
 
-💸 Automating your workflows doesn't have to be a difficult or expensive process. You also don't need any programming knowledge to use Automatisch.
+✅ **Multi-Branch Workflows**: Create complex workflows with conditional branching and parallel execution
+🔄 **Visual Flow Editor**: Drag-and-drop interface with real-time position saving  
+🚀 **Open Source**: Complete transparency and community-driven development
+💾 **Data Sovereignty**: Store your data on your own servers
 
-## Advantages
+## Local Installation
 
-There are other existing solutions in the market, like Zapier and Integromat, so you might be wondering why you should use Automatisch.
+### Prerequisites
 
-✅ One of the main benefits of using Automatisch is that it allows you to store your data on your own servers, which is essential for businesses that handle sensitive user information and cannot risk sharing it with external cloud services. This is especially relevant for industries such as healthcare and finance, as well as for European companies that must adhere to the General Data Protection Regulation (GDPR).
+- Docker and Docker Compose
+- Git
 
-🤓 Your contributions are vital to the development of Automatisch. As an open-source software, anyone can have an impact on how it is being developed.
-
-💙 No vendor lock-in. If you ever decide that Automatisch is no longer helpful for your business, you can switch to any other provider, which will be easier than switching from the one cloud provider to another since you have all data and flexibility.
-
-## Documentation
-
-The official documentation can be found here: [https://automatisch.io/docs](https://automatisch.io/docs)
-
-## Installation
+### Quick Start
 
 ```bash
 # Clone the repository
 git clone https://github.com/automatisch/automatisch.git
-
-# Go to the repository folder
 cd automatisch
 
-# Start
-docker compose up
+# Start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
 ```
 
-You can use `user@automatisch.io` email address and `sample` password to login to Automatisch. Please do not forget to change your email and password from the settings page.
+### Access the Application
 
-For other installation types, you can check the [installation](https://automatisch.io/docs/guide/installation) guide.
+- **Web Interface**: http://localhost:3000
+- **Default Login**: `user@automatisch.io` / `sample`
 
-## Community Links
+### Development Setup
 
-- [Discord](https://discord.gg/dJSah9CVrC)
-- [Twitter](https://twitter.com/automatischio)
+```bash
+# Clone the repository
+git clone https://github.com/automatisch/automatisch.git
+cd automatisch
+
+# Install backend dependencies
+cd packages/backend
+yarn install
+
+# Install frontend dependencies  
+cd ../web
+yarn install
+
+# Copy environment file
+cp .env-example .env
+
+# Start PostgreSQL and Redis (required)
+docker run -d --name postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:15
+docker run -d --name redis -p 6379:6379 redis:7
+
+# Start backend
+cd packages/backend
+yarn dev
+
+# Start frontend (in new terminal)
+cd packages/web  
+yarn dev
+```
+
+### Environment Variables
+
+Create `.env` file with:
+
+```bash
+# Database
+POSTGRES_HOST=localhost
+POSTGRES_DATABASE=automatisch
+POSTGRES_USERNAME=postgres
+POSTGRES_PASSWORD=postgres
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Security (generate with: openssl rand -base64 36)
+ENCRYPTION_KEY=your-encryption-key
+WEBHOOK_SECRET_KEY=your-webhook-secret
+APP_SECRET_KEY=your-app-secret
+```
+
+## Multi-Branch Workflows
+
+### Import Sample Workflow
+
+1. Open the workflow editor
+2. Click "Import Multi-Branch Workflow" 
+3. Use the pre-loaded sample to test branching functionality
+
+### Basic Commands
+
+```bash
+# Stop services
+docker compose down
+
+# View logs
+docker compose logs -f main
+
+# Restart services
+docker compose restart
+
+# Reset database
+docker compose down -v && docker compose up -d
+```
 
 ## Support
 
-If you have any questions or problems, please visit our GitHub issues page, and we'll try to help you as soon as possible.
-
-[https://github.com/automatisch/automatisch/issues](https://github.com/automatisch/automatisch/issues)
+- **Issues**: [GitHub Issues](https://github.com/automatisch/automatisch/issues)
+- **Discord**: [Join Community](https://discord.gg/dJSah9CVrC)
 
 ## License
 
-Automatisch Community Edition (Automatisch CE) is an open-source software with the [AGPL-3.0 license](LICENSE.agpl).
-
-Automatisch Enterprise Edition (Automatisch EE) is a commercial offering with the [Enterprise license](LICENSE.enterprise).
-
-The Automatisch repository contains both AGPL-licensed and Enterprise-licensed files. We maintain a single repository to make development easier.
-
-All files that contain ".ee." in their name fall under the [Enterprise license](LICENSE.enterprise). All other files fall under the [AGPL-3.0 license](LICENSE.agpl).
-
-See the [LICENSE](LICENSE) file for more information.
+AGPL-3.0 License - see [LICENSE](LICENSE) file for details.
