@@ -61,6 +61,11 @@ const Editor = ({ flow }) => {
 
   const onStepDelete = useCallback(
     async (nodeId) => {
+      console.log('=== ON STEP DELETE ===');
+      console.log('Deleting node:', nodeId);
+      console.log('Current nodes:', nodes);
+      console.log('Current edges:', edges);
+      
       const prevEdge = edges.find((edge) => edge.target === nodeId);
       const edgeToDelete = edges.find((edge) => edge.source === nodeId);
 
@@ -82,49 +87,128 @@ const Editor = ({ flow }) => {
         .filter((edge) => !!edge);
 
       const newNodes = nodes.filter((node) => node.id !== nodeId);
-      setNodes(newNodes);
-      setEdges(newEdges);
+      
+      // IMPORTANT: Keep the laidOut flag and positions for remaining nodes
+      const finalNodes = newNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          laidOut: true, // Preserve laid out state
+        }
+      }));
+      
+      const finalEdges = newEdges.map(edge => ({
+        ...edge,
+        data: {
+          ...edge.data,
+          laidOut: true, // Preserve laid out state
+        }
+      }));
+      
+      console.log('Final nodes after delete:', finalNodes);
+      console.log('Final edges after delete:', finalEdges);
+      
+      setNodes(finalNodes);
+      setEdges(finalEdges);
     },
     [nodes, edges, setNodes, setEdges],
   );
 
   const onStepAdd = useCallback(
     async (previousStepId) => {
+      console.log('🚀 === ON STEP ADD START ===');
+      console.log('🔍 Previous step ID:', previousStepId);
+      console.log('🔍 Current nodes count:', nodes.length);
+      console.log('🔍 All current nodes:', nodes.map(n => ({ id: n.id, position: n.position, type: n.type })));
+      
       const { data: createdStep } = await createStep({ previousStepId });
+      console.log('✅ Created step from backend:', createdStep);
+      console.log('🆔 New step ID:', createdStep.id);
 
       const previousNode = nodes.find(n => n.id === previousStepId);
+      console.log('🔍 Found previous node:', previousNode);
+      
+      if (!previousNode) {
+        console.error('❌ Previous node not found! This is the problem!');
+        console.log('🔍 Available node IDs:', nodes.map(n => n.id));
+        console.log('🔍 Looking for ID:', previousStepId);
+      }
+      
+      // Calculate position for new node (below previous node)
+      const newPosition = previousNode ? {
+        x: previousNode.position.x,
+        y: previousNode.position.y + 150,
+      } : { 
+        x: 300, // Default fallback position
+        y: 150 
+      };
+      
+      console.log('📍 Calculated new position:', newPosition);
+      console.log('📍 Previous node position was:', previousNode?.position);
+      
       const newNode = {
         id: createdStep.id,
         type: NODE_TYPES.FLOW_STEP,
-        position: previousNode ? {
-          x: previousNode.position.x,
-          y: previousNode.position.y + 150,
-        } : { x: 0, y: 0 },
+        position: newPosition,
         data: {
-          laidOut: true,
+          laidOut: true, // Mark as laid out immediately
         },
       };
+      
+      console.log('🆕 New node object:', newNode);
+
+      // CRITICAL: Save the visual position to backend immediately
+      console.log('💾 Saving visual position to backend:', newPosition);
+      try {
+        const updateResult = await updateStep({
+          id: createdStep.id,
+          visualPosition: newPosition,
+        });
+        console.log('✅ Backend update result:', updateResult);
+      } catch (error) {
+        console.error('❌ Backend update failed:', error);
+      }
 
       const updatedNodes = nodes.flatMap((node) => {
         if (node.id === previousStepId) {
+          console.log('🔄 Inserting new node after:', node.id);
           return [node, newNode];
+        }
+        // Update invisible node position to be below the new last node
+        if (node.id === INVISIBLE_NODE_ID) {
+          const newInvisiblePosition = {
+            x: newPosition.x,
+            y: newPosition.y + 150,
+          };
+          console.log('👻 Updating invisible node position to:', newInvisiblePosition);
+          return {
+            ...node,
+            position: newInvisiblePosition
+          };
         }
         return node;
       });
+      
+      console.log('🔄 Updated nodes array:', updatedNodes.map(n => ({ id: n.id, position: n.position, type: n.type })));
 
       const updatedEdges = edges
         .map((edge) => {
           if (edge.source === previousStepId) {
             const previousTarget = edge.target;
+            console.log('🔗 Updating edge from', previousStepId, 'to split between', createdStep.id, 'and', previousTarget);
             return [
-              { ...edge, target: createdStep.id },
+              { 
+                ...edge, 
+                target: createdStep.id,
+                data: { ...edge.data, laidOut: true }
+              },
               {
                 id: uuidv4(),
                 source: createdStep.id,
                 target: previousTarget,
                 type: EDGE_TYPES.ADD_NODE_EDGE,
                 data: {
-                  laidOut: true,
+                  laidOut: true, // Mark as laid out
                 },
               },
             ];
@@ -133,22 +217,42 @@ const Editor = ({ flow }) => {
         })
         .flat();
 
-      setNodes(updatedNodes);
+      // Ensure all nodes maintain their laidOut status
+      const finalNodes = updatedNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          laidOut: true,
+        }
+      }));
+      
+      console.log('🏁 Final nodes being set:', finalNodes.map(n => ({ id: n.id, position: n.position, type: n.type })));
+      console.log('🏁 Final edges being set:', updatedEdges.length, 'edges');
+      
+      setNodes(finalNodes);
       setEdges(updatedEdges);
+      
+      console.log('🚀 === ON STEP ADD END ===');
     },
-    [createStep, nodes, edges, setNodes, setEdges],
+    [createStep, nodes, edges, setNodes, setEdges, updateStep],
   );
-
-
 
   const onNodesChange = useCallback(
     (changes) => {
+      console.log('=== ON NODES CHANGE ===');
+      console.log('Changes:', changes);
+      
       const newNodes = applyNodeChanges(changes, nodes);
+      console.log('New nodes after changes:', newNodes);
+      
       setNodes(newNodes);
       
       // Save positions when nodes are dragged
       changes.forEach((change) => {
-        if (change.type === 'position' && change.position) {
+        if (change.type === 'position' && change.position && !change.dragging) {
+          // Only save when drag is complete (dragging is false/undefined)
+          console.log(`🎯 Saving position for node ${change.id}:`, change.position);
+          
           const step = flow?.steps?.find(s => s.id === change.id);
           if (step) {
             updateStep({
@@ -210,7 +314,21 @@ const Editor = ({ flow }) => {
 
   useEffect(
     function initiateNodesAndEdges() {
+      console.log('=== INITIATING NODES AND EDGES ===');
+      console.log('Flow steps from backend:', flow?.steps);
+      
+      // Skip re-initialization if we already have nodes (prevents overriding during add/delete operations)
+      if (nodes.length > 0) {
+        console.log('⏭️ Skipping initialization - nodes already exist');
+        return;
+      }
+      
       const newNodes = flow?.steps.map((step, index) => {
+        console.log(`Step ${step.id}:`, {
+          hasVisualPosition: !!step.visualPosition,
+          visualPosition: step.visualPosition,
+        });
+        
         return {
           id: step.id,
           type: NODE_TYPES.FLOW_STEP,
@@ -220,19 +338,28 @@ const Editor = ({ flow }) => {
           },
           zIndex: index !== 0 ? 0 : 1,
           data: {
-            laidOut: !!step.visualPosition,
+            laidOut: !!step.visualPosition, // True if position exists
           },
         };
       });
 
+      // Position invisible node below the last step node
+      const lastNode = newNodes[newNodes.length - 1];
+      const invisibleNodePosition = lastNode ? {
+        x: lastNode.position.x,
+        y: lastNode.position.y + 150, // 150px below last node
+      } : { x: 0, y: 150 };
+
       newNodes.push({
         id: INVISIBLE_NODE_ID,
         type: NODE_TYPES.INVISIBLE,
-        position: {
-          x: 0,
-          y: 0,
+        position: invisibleNodePosition,
+        data: {
+          laidOut: true,
         },
       });
+
+      console.log('Created nodes:', newNodes);
 
       const newEdges = newNodes
         .map((node, i) => {
@@ -245,7 +372,8 @@ const Editor = ({ flow }) => {
               target: targetId,
               type: 'addNodeEdge',
               data: {
-                laidOut: false,
+                // Edge is laid out if both connected nodes are laid out
+                laidOut: node.data?.laidOut && newNodes[i + 1]?.data?.laidOut,
               },
             };
           }
@@ -253,41 +381,72 @@ const Editor = ({ flow }) => {
         })
         .filter((edge) => !!edge);
 
+      console.log('Created edges:', newEdges);
       setInitialNodes(newNodes);
       setInitialEdges(newEdges);
     },
-    [flow?.steps],
+    [flow?.steps, nodes.length],
   );
 
   // Calculate the initial layout before browser paint
   useLayoutEffect(() => {
+    console.log('=== USE LAYOUT EFFECT ===');
+    console.log('Initial nodes:', initialNodes);
+    console.log('Initial edges:', initialEdges);
+    
     if (initialNodes.length > 0 && initialEdges.length >= 0) {
-      // Check if nodes already have saved positions
-      const hasCustomPositions = initialNodes.some(node => 
-        node.data?.laidOut
+      // Check if ANY nodes have saved positions (excluding invisible node)
+      const flowStepNodes = initialNodes.filter(n => n.type === NODE_TYPES.FLOW_STEP);
+      const hasAnySavedPositions = flowStepNodes.some(node => 
+        node.data?.laidOut && node.position.x !== 0 && node.position.y !== 0
       );
       
-      if (hasCustomPositions) {
-        // Use existing positions, just mark as laid out
-        setNodes(initialNodes.map(node => ({
+      console.log('Flow step nodes:', flowStepNodes);
+      console.log('Has any saved positions?', hasAnySavedPositions);
+      
+      if (hasAnySavedPositions) {
+        // Use existing positions - don't run auto-layout
+        console.log('✅ Using saved positions - NO AUTO-LAYOUT');
+        const finalNodes = initialNodes.map(node => ({
           ...node,
           data: { ...node.data, laidOut: true }
-        })));
-        setEdges(initialEdges.map(edge => ({
+        }));
+        const finalEdges = initialEdges.map(edge => ({
           ...edge,
           data: { ...edge.data, laidOut: true }
-        })));
+        }));
+        
+        console.log('Final nodes being set:', finalNodes);
+        console.log('Final edges being set:', finalEdges);
+        
+        setNodes(finalNodes);
+        setEdges(finalEdges);
       } else {
-        // Use auto-layout for new flows
+        // Use auto-layout for brand new flows only
+        console.log('🔄 Running auto-layout for new flow');
         getLaidOutElements(initialNodes, initialEdges).then(
           ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+            console.log('Auto-layouted nodes:', layoutedNodes);
+            console.log('Auto-layouted edges:', layoutedEdges);
+            
             setNodes(layoutedNodes);
             setEdges(layoutedEdges);
+            
+            // IMPORTANT: Save the auto-generated positions to backend
+            layoutedNodes.forEach(node => {
+              if (node.type === NODE_TYPES.FLOW_STEP) {
+                console.log(`Saving auto-layout position for ${node.id}:`, node.position);
+                updateStep({
+                  id: node.id,
+                  visualPosition: node.position,
+                });
+              }
+            });
           },
         );
       }
     }
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+  }, [initialNodes, initialEdges, setNodes, setEdges, updateStep]);
 
   useEffect(function updateContainerHeightOnResize() {
     const updateHeight = () => {
@@ -318,14 +477,6 @@ const Editor = ({ flow }) => {
     },
     [flow?.steps, selectedStepId],
   );
-
-  // Disable auto-relayout on resize to preserve user positioning
-  // useEffect(
-  //   function reLayoutOnWindowResize() {
-  //     // Disabled to allow free positioning
-  //   },
-  //   [nodes, edges, setNodes, setEdges],
-  // );
 
   return (
     <NodesContext.Provider
